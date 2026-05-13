@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A teacher, administrator, or student account in the school.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full name of the user" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "teacher", "student"] },
+        "subjects": { "type": "array", "items": { "type": "string" }, "description": "List of subject IDs the teacher handles" },
+        "status": { "type": "string", "enum": ["active", "disabled", "pending"] },
+        "studentId": { "type": "string", "description": "Linked student ID for student accounts" },
+        "teacherId": { "type": "string", "description": "Unique teacher identification number" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "A learner in the school.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "classId": { "type": "string", "description": "ID of the class the student belongs to" },
+        "curriculum": { "type": "string", "enum": ["lower", "advanced"] },
+        "registrationNumber": { "type": "string" },
+        "photoUrl": { "type": "string", "description": "URL of the student's profile photo" },
+        "subjectIds": { "type": "array", "items": { "type": "string" }, "description": "IDs of subjects the student is registered for" },
+        "combination": { "type": "string", "description": "A-Level subject combination (e.g. PCM/Sub-ICT)" }
+      },
+      "required": ["id", "name", "classId", "curriculum"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Record of student presence for classes or examinations.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "type": { "type": "string", "enum": ["examination", "class"] },
+        "date": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["present", "absent", "late"] },
+        "subjectId": { "type": "string", "description": "Optional: Subject ID for subject-specific attendance or exams" },
+        "term": { "type": "string", "enum": ["Term 1", "Term 2", "Term 3"] },
+        "year": { "type": "number" },
+        "supervisorName": { "type": "string" },
+        "supervisorSignature": { "type": "string", "description": "Name or handle for the signature" }
+      },
+      "required": ["studentId", "type", "date", "status", "term", "year"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "A subject in the curriculum.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "curriculum": { "type": "string", "enum": ["lower", "advanced"] }
+      },
+      "required": ["id", "name", "code", "curriculum"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "A school class (e.g., S1, S6).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "curriculum": { "type": "string", "enum": ["lower", "advanced"] }
+      },
+      "required": ["id", "name", "curriculum"]
+    },
+    "Score": {
+      "title": "Score",
+      "description": "A score for a student in a specific subject.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "subjectId": { "type": "string" },
+        "classId": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "term": { "type": "string", "enum": ["Term 1", "Term 2", "Term 3"] },
+        "year": { "type": "number" },
+        "marks": { "type": "number", "description": "Numeric score (0-100)" },
+        "competency": { "type": "string", "description": "Competency level for Lower Curriculum" },
+        "comment": { "type": "string" }
+      },
+      "required": ["studentId", "subjectId", "classId", "teacherId", "term", "year", "marks"]
+    },
+    "TermComment": {
+      "title": "TermComment",
+      "description": "General comments for a student for a specific term.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "term": { "type": "string", "enum": ["Term 1", "Term 2", "Term 3"] },
+        "year": { "type": "number" },
+        "teacherComment": { "type": "string" },
+        "headteacherComment": { "type": "string" }
+      },
+      "required": ["studentId", "term", "year"]
+    },
+    "SchoolSettings": {
+      "title": "SchoolSettings",
+      "description": "Global school settings for a specific term and year.",
+      "type": "object",
+      "properties": {
+        "term": { "type": "string", "enum": ["Term 1", "Term 2", "Term 3"] },
+        "year": { "type": "number" },
+        "breakingOffDate": { "type": "string", "format": "date" },
+        "reportingDate": { "type": "string", "format": "date" },
+        "headteacherComment": { "type": "string" }
+      },
+      "required": ["term", "year", "breakingOffDate", "reportingDate"]
+    },
+    "Media": {
+      "title": "Media",
+      "description": "An uploaded photo or file.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string" },
+        "type": { "type": "string", "enum": ["photo", "document"] },
+        "uploadedAt": { "type": "string", "format": "date-time" },
+        "uploadedBy": { "type": "string", "description": "UID of the user who uploaded the file" },
+        "studentId": { "type": "string", "description": "Optional linked student ID" }
+      },
+      "required": ["id", "url", "type", "uploadedAt", "uploadedBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "Teacher and admin profiles" },
+    "/students/{studentId}": { "schema": "Student", "description": "Learner profiles" },
+    "/subjects/{subjectId}": { "schema": "Subject", "description": "Curriculum subjects" },
+    "/classes/{classId}": { "schema": "Class", "description": "School classes" },
+    "/scores/{scoreId}": { "schema": "Score", "description": "Student scores" },
+    "/term_comments/{commentId}": { "schema": "TermComment", "description": "General term comments" },
+    "/school_settings/{settingId}": { "schema": "SchoolSettings", "description": "Global term settings" },
+    "/media/{mediaId}": { "schema": "Media", "description": "Uploaded media files" },
+    "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Student attendance records" }
+  }
+}

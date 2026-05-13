@@ -1,0 +1,268 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (UID)
+    // Fields:
+    //   - uid: string (required)
+    //   - name: string (required)
+    //   - email: string (required)
+    //   - role: string (required, 'admin' or 'teacher')
+    //   - subjects: list of strings (optional)
+    //   - status: string (optional, 'active' or 'disabled')
+    //
+    // Collection: students
+    // Document ID: studentId
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - classId: string (required)
+    //   - curriculum: string (required, 'lower' or 'advanced')
+    //   - registrationNumber: string (optional)
+    //   - photoUrl: string (optional)
+    //
+    // Collection: subjects
+    // Document ID: subjectId
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - code: string (required)
+    //   - curriculum: string (required, 'lower' or 'advanced')
+    //
+    // Collection: classes
+    // Document ID: classId
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - curriculum: string (required, 'lower' or 'advanced')
+    //
+    // Collection: scores
+    // Document ID: scoreId
+    // Fields:
+    //   - studentId: string (required)
+    //   - subjectId: string (required)
+    //   - classId: string (required)
+    //   - teacherId: string (required)
+    //   - term: string (required, 'Term 1', 'Term 2', 'Term 3')
+    //   - year: number (required)
+    //   - marks: number (required, 0-100)
+    //   - competency: string (optional)
+    //   - comment: string (optional)
+    //
+    // Collection: term_comments
+    // Document ID: commentId
+    // Fields:
+    //   - studentId: string (required)
+    //   - term: string (required, 'Term 1', 'Term 2', 'Term 3')
+    //   - year: number (required)
+    //   - teacherComment: string (optional)
+    //   - headteacherComment: string (optional)
+    //
+    // Collection: school_settings
+    // Document ID: term_year
+    // Fields:
+    //   - term: string (required)
+    //   - year: number (required)
+    //   - breakingOffDate: string (required)
+    //   - reportingDate: string (required)
+    //   - headteacherComment: string (optional)
+    //
+    // Collection: media
+    // Document ID: mediaId
+    // Fields:
+    //   - id: string (required)
+    //   - url: string (required)
+    //   - type: string (required, 'photo' or 'document')
+    //   - uploadedAt: timestamp (required)
+    //   - uploadedBy: string (required)
+    //   - studentId: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (getUserData().role == 'admin' ||
+          (request.auth.token.email == "egaujerome4@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && getUserData().role == 'teacher' && getUserData().status == 'active';
+    }
+
+    function isStudent() {
+      return isAuthenticated() && getUserData().role == 'student';
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'name', 'email', 'role', 'subjects', 'status', 'studentId', 'teacherId']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.role in ['admin', 'teacher', 'student'] &&
+             (!('status' in data) || data.status in ['active', 'disabled', 'pending']) &&
+             (!('studentId' in data) || data.studentId is string) &&
+             (!('teacherId' in data) || data.teacherId is string);
+    }
+
+    function isValidStudent(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'classId', 'curriculum', 'registrationNumber', 'photoUrl', 'subjectIds', 'combination']) &&
+             (!('id' in data) || data.id is string) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.classId is string &&
+             data.curriculum in ['lower', 'advanced'] &&
+             (!('registrationNumber' in data) || (data.registrationNumber is string && data.registrationNumber.matches("^UG-[A-Z0-9]{7}$"))) &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() < 1000)) &&
+             (!('subjectIds' in data) || data.subjectIds is list) &&
+             (!('combination' in data) || (data.combination is string && data.combination.size() < 50));
+    }
+
+    function isValidAttendance(data) {
+      return hasOnlyAllowedFields(['studentId', 'type', 'date', 'status', 'subjectId', 'term', 'year', 'supervisorName', 'supervisorSignature']) &&
+             data.studentId is string &&
+             data.type in ['examination', 'class'] &&
+             data.date is string &&
+             data.status in ['present', 'absent', 'late'] &&
+             (!('subjectId' in data) || data.subjectId is string) &&
+             data.term in ['Term 1', 'Term 2', 'Term 3'] &&
+             data.year is number &&
+             (!('supervisorName' in data) || data.supervisorName is string) &&
+             (!('supervisorSignature' in data) || data.supervisorSignature is string);
+    }
+
+    function isValidSubject(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'code', 'curriculum']) &&
+             data.id is string && data.name is string && data.code is string &&
+             data.curriculum in ['lower', 'advanced'];
+    }
+
+    function isValidClass(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'curriculum']) &&
+             data.id is string && data.name is string &&
+             data.curriculum in ['lower', 'advanced'];
+    }
+
+    function isValidScore(data) {
+      return hasOnlyAllowedFields(['studentId', 'subjectId', 'classId', 'teacherId', 'term', 'year', 'marks', 'competency', 'comment', 'aoiMarks', 'eotMarks']) &&
+             data.studentId is string && data.subjectId is string && data.classId is string &&
+             data.teacherId is string && data.term in ['Term 1', 'Term 2', 'Term 3'] &&
+             data.year is number && data.marks is number && data.marks >= 0 && data.marks <= 100 &&
+             (!('aoiMarks' in data) || (data.aoiMarks is number && data.aoiMarks >= 0 && data.aoiMarks <= 20)) &&
+             (!('eotMarks' in data) || (data.eotMarks is number && data.eotMarks >= 0 && data.eotMarks <= 80));
+    }
+
+    function isValidTermComment(data) {
+      return hasOnlyAllowedFields(['studentId', 'term', 'year', 'teacherComment', 'headteacherComment', 'updatedAt']) &&
+             data.studentId is string && data.term in ['Term 1', 'Term 2', 'Term 3'] &&
+             data.year is number &&
+             (!('teacherComment' in data) || data.teacherComment is string) &&
+             (!('headteacherComment' in data) || data.headteacherComment is string);
+    }
+
+    function isValidSchoolSettings(data) {
+      return hasOnlyAllowedFields(['term', 'year', 'breakingOffDate', 'reportingDate', 'headteacherComment']) &&
+             data.term in ['Term 1', 'Term 2', 'Term 3'] &&
+             data.year is number &&
+             data.breakingOffDate is string &&
+             data.reportingDate is string &&
+             (!('headteacherComment' in data) || data.headteacherComment is string);
+    }
+
+    function isValidMedia(data) {
+      return hasOnlyAllowedFields(['id', 'url', 'type', 'uploadedAt', 'uploadedBy', 'studentId']) &&
+             data.id is string && data.url is string && data.type in ['photo', 'document'] &&
+             data.uploadedAt is timestamp && data.uploadedBy is string &&
+             (!('studentId' in data) || data.studentId is string);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isOwner(userId));
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.status == resource.data.status));
+      allow delete: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || (isStudent() && getUserData().studentId == studentId));
+      allow create, update: if isAuthenticated() && (isAdmin() || isTeacher()) && isValidStudent(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /subjects/{subjectId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /classes/{classId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /scores/{scoreId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || (isStudent() && getUserData().studentId == resource.data.studentId));
+      allow create: if isAuthenticated() && isValidScore(request.resource.data) && (isAdmin() || (isTeacher() && request.resource.data.teacherId == request.auth.uid));
+      allow update: if isAuthenticated() && isValidScore(request.resource.data) && (isAdmin() || (isTeacher() && resource.data.teacherId == request.auth.uid && request.resource.data.teacherId == resource.data.teacherId));
+      allow delete: if isAdmin() || (isTeacher() && resource.data.teacherId == request.auth.uid);
+    }
+
+    match /term_comments/{commentId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || (isStudent() && getUserData().studentId == resource.data.studentId));
+      allow create, update: if isAuthenticated() && isValidTermComment(request.resource.data) && (isAdmin() || isTeacher());
+      allow delete: if isAdmin();
+    }
+
+    match /school_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin() && isValidSchoolSettings(request.resource.data);
+    }
+
+    match /media/{mediaId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher());
+      allow create: if isAuthenticated() && isValidMedia(request.resource.data) && (isAdmin() || isTeacher());
+      allow update, delete: if isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || (isStudent() && getUserData().studentId == resource.data.studentId));
+      allow create, update: if isAuthenticated() && (isAdmin() || isTeacher()) && isValidAttendance(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

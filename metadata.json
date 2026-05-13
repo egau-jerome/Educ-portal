@@ -1,0 +1,7 @@
+{
+  "name": "Remix: Uganda School Management System",
+  "description": "A comprehensive system for Ugandan schools to manage teachers, students, and subjects across Lower and Advanced curricula, featuring automated report card generation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
